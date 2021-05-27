@@ -32,7 +32,7 @@
 /* Mbed includes. */
 #include "mbed.h"
 #include "mbed_trace.h"
-
+#include "mbed_stats.h"
 /* Include Demo Config as the first non-system header. */
 #include "demo_config.h"
 
@@ -41,6 +41,11 @@
 
 /* Mbed TLSSocket sockets transport implementation. */
 #include "transport_mbed_tls.h"
+#define MBED_HEAP_STATS_ENABLED 1
+
+#if MBED_HEAP_STATS_ENABLED
+    mbed_stats_heap_t heap_stats;
+#endif
 
 /* Clock for timer. */
 extern "C" {
@@ -274,9 +279,14 @@ extern "C" {
  */
 const AppVersion32_t appFirmwareVersion =
 {
+#if defined(__CC_ARM)
     .u.x.major = APP_VERSION_MAJOR,
     .u.x.minor = APP_VERSION_MINOR,
     .u.x.build = APP_VERSION_BUILD,
+#else
+    {{APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD}}
+#endif
+
 };
 
 /**
@@ -630,7 +640,13 @@ static void otaAppCallback( OtaJobEvent_t event,
     {
         case OtaJobEventActivate:
             LogInfo( ( "Received OtaJobEventActivate callback from OTA Agent." ) );
-
+            /* Print memory statics */
+            #if MBED_HEAP_STATS_ENABLED
+                mbed_stats_heap_get(&heap_stats);
+                LogInfo(("Current heap: %lu\r\n", heap_stats.current_size));
+                LogInfo(("Max heap size: %lu\r\n", heap_stats.max_size));
+                LogInfo(("Reserved heap size: %lu\r\n", heap_stats.reserved_size));
+            #endif            
             /* Activate the new firmware image. */
             OTA_ActivateNewImage();
 
@@ -1060,6 +1076,12 @@ static int establishMqttSession( MQTTContext_t * pMqttContext )
     else
     {
         LogInfo( ( "MQTT connection successfully established with broker.\n\n" ) );
+#if MBED_HEAP_STATS_ENABLED
+        mbed_stats_heap_get(&heap_stats);
+        LogInfo(("Current heap: %lu\r\n", heap_stats.current_size));
+        LogInfo(("Max heap size: %lu\r\n", heap_stats.max_size));
+        LogInfo(("Reserved heap size: %lu\r\n", heap_stats.reserved_size));
+#endif            
     }
 
     return returnStatus;
@@ -1673,7 +1695,12 @@ int main()
     }
     LogInfo( ("MAC: %s", net->get_mac_address()) );
     LogInfo( ("Connection Success") );
-
+#if MBED_HEAP_STATS_ENABLED
+    mbed_stats_heap_get(&heap_stats);
+    LogInfo(("Current heap: %lu\r\n", heap_stats.current_size));
+    LogInfo(("Max heap size: %lu\r\n", heap_stats.max_size));
+    LogInfo(("Reserved heap size: %lu\r\n", heap_stats.reserved_size));
+#endif            
     /* Return error status. */
     int returnStatus = EXIT_SUCCESS;
 
