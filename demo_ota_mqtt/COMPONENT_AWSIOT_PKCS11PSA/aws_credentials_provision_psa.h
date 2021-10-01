@@ -16,19 +16,22 @@
  * limitations under the License.
  */
 
-#ifndef AWS_CREDENTIALS_PROVISION_H
-#define AWS_CREDENTIALS_PROVISION_H
+#ifndef AWS_CREDENTIALS_PROVISION_PSA_H
+#define AWS_CREDENTIALS_PROVISION_PSA_H
+
+#include "psa/crypto.h"
 
 namespace aws {
 namespace credentials {
 namespace provision {
-    const char *rootCACrt(void);
-    const char *deviceCrt(void);
-    const char *devicePubKey(void);
-    const char *devicePvtKey(void);
-    const char *codeVerKey(void);
+    bool rootCACrt(const uint8_t **p_cred, size_t *p_cred_size);
+    bool deviceCrt(const uint8_t **p_cred, size_t *p_cred_size);
+    /* When mbedtls doesn't support this key type as opaque, provide its PEM
+     * as fallback to go non-opaque. Of course, the alternative is non-secure. */
+    bool devicePvtKeyId(psa_key_id_t *key_id);
+    bool devicePvtKey(const uint8_t **p_cred, size_t *p_cred_size);
 }
 }
 }
 
-#endif /* ifndef IOT_PLATFORM_TYPES_TEMPLATE_H_ */
+#endif /* ifndef AWS_CREDENTIALS_PROVISION_PSA_H */

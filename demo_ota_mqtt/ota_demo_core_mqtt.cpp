@@ -38,11 +38,14 @@
 #include "demo_config.h"
 
 /* Include credential file */
-#include "aws_credentials_provision.h"
+#if COMPONENT_AWSIOT_PKCS11
+#include "aws_credentials_provision_kvstore.h"
+#elif COMPONENT_AWSIOT_PKCS11PSA
+#include "aws_credentials_provision_psa.h"
+#endif
 
 /* Mbed TLSSocket sockets transport implementation. */
 #include "transport_mbed_tls.h"
-#define MBED_HEAP_STATS_ENABLED 1
 
 #if MBED_HEAP_STATS_ENABLED
     mbed_stats_heap_t heap_stats;
@@ -80,7 +83,11 @@ extern "C" {
 extern "C" {
 #include "ota_mqtt_interface.h"
 }
+#if COMPONENT_AWSIOT_OTA_PAL_NVTBL
 #include "ota_pal_mbed.h"
+#elif COMPONENT_AWSIOT_OTA_PAL_PSAFWU
+#include "ota_pal_psafwu.h"
+#endif
 
 /* Include firmware version struct definition. */
 extern "C" {
@@ -983,15 +990,18 @@ static int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext
     /* Initialize credentials for establishing TLS session. */
     memset( &credentialInfo, 0, sizeof( CredentialInfo_t ) );
     //opensslCredentials.pRootCaPath = ROOT_CA_CERT_PATH;
-    credentialInfo.rootCA = aws::credentials::provision::rootCACrt();
+    aws::credentials::provision::rootCACrt(&credentialInfo.rootCA, &credentialInfo.rootCASize);
 
     /* If #CLIENT_USERNAME is defined, username/password is used for authenticating
      * the client. */
     #ifndef CLIENT_USERNAME
         //opensslCredentials.pClientCertPath = CLIENT_CERT_PATH;
         //opensslCredentials.pPrivateKeyPath = CLIENT_PRIVATE_KEY_PATH;
-        credentialInfo.clientCrt = aws::credentials::provision::deviceCrt();
-        credentialInfo.clientKey = aws::credentials::provision::devicePvtKey();
+        aws::credentials::provision::deviceCrt(&credentialInfo.clientCrt, &credentialInfo.clientCrtSize);
+    #if COMPONENT_AWSIOT_PKCS11PSA
+        aws::credentials::provision::devicePvtKeyId(&credentialInfo.clientKeyId);
+    #endif
+        aws::credentials::provision::devicePvtKey(&credentialInfo.clientKey, &credentialInfo.clientKeySize);
     #endif
 
     /* AWS IoT requires devices to send the Server Name Indication (SNI)
@@ -1745,14 +1755,15 @@ int main()
     return returnStatus;
 }
 
-#if MBED_CONF_MBED_TRACE_ENABLE || MBED_CONF_AWS_CLIENT_LOG_RETARGET
+#if MBED_CONF_MBED_TRACE_ENABLE || MBED_CONF_AWS_CLIENT_LOG_RETARGET || \
+    MBED_HEAP_STATS_ENABLED || MBED_STACK_STATS_ENABLED
 
 /* Synchronize log output with mutex
  *
  * We can use the same mutex to synchronize log output across all AWS IoT SDK
  * and mbed trace, if enabled.
  */
-static Mutex log_mutex;
+Mutex log_mutex;
 
 #if MBED_CONF_MBED_TRACE_ENABLE
 static void trace_mutex_lock()
@@ -1776,4 +1787,5 @@ extern "C" void aws_iot_log_printf(const char * format, ...) {
 }
 #endif  /* #if MBED_CONF_AWS_CLIENT_LOG_RETARGET */
 
-#endif /* #if MBED_CONF_MBED_TRACE_ENABLE || MBED_CONF_AWS_CLIENT_LOG_RETARGET */
+#endif /* #if MBED_CONF_MBED_TRACE_ENABLE || MBED_CONF_AWS_CLIENT_LOG_RETARGET || \
+        *     MBED_HEAP_STATS_ENABLED || MBED_STACK_STATS_ENABLED */

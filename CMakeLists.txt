@@ -35,18 +35,35 @@ target_include_directories(${APP_TARGET}
         demo_ota_mqtt
 )
 
+if("AWSIOT_PKCS11" IN_LIST MBED_TARGET_LABELS)
+    target_include_directories(${APP_TARGET}
+        PRIVATE
+            demo_ota_mqtt/COMPONENT_AWSIOT_PKCS11
+            pre-main/provision/COMPONENT_AWSIOT_PKCS11
+    )
+elseif("AWSIOT_PKCS11PSA" IN_LIST MBED_TARGET_LABELS)
+    target_include_directories(${APP_TARGET}
+        PRIVATE
+            demo_ota_mqtt/COMPONENT_AWSIOT_PKCS11PSA
+            pre-main/provision/COMPONENT_AWSIOT_PKCS11PSA
+    )
+endif()
+
 target_sources(${APP_TARGET}
     PRIVATE
         configs/aws_credentials.c
         demo_ota_mqtt/ota_demo_core_mqtt.cpp
-        demo_ota_mqtt/aws_credentials_provision.cpp
+        $<$<IN_LIST:AWSIOT_PKCS11,${MBED_TARGET_LABELS}>:demo_ota_mqtt/COMPONENT_AWSIOT_PKCS11/aws_credentials_provision_kvstore.cpp>
+        $<$<IN_LIST:AWSIOT_PKCS11PSA,${MBED_TARGET_LABELS}>:demo_ota_mqtt/COMPONENT_AWSIOT_PKCS11PSA/aws_credentials_provision_psa.cpp>
         demo_ota_mqtt/mqtt_subscription_manager.c
         pre-main/mbed_main.cpp
         pre-main/host-stdin/dispatch_host_command.cpp
         pre-main/host-stdin/fetch_host_command.cpp
         pre-main/host-stdin/mem_stats.cpp
         pre-main/host-stdin/pump_host_command.cpp
-        pre-main/provision/provision.cpp
+        $<$<IN_LIST:AWSIOT_PKCS11,${MBED_TARGET_LABELS}>:pre-main/provision/COMPONENT_AWSIOT_PKCS11/provision_kvstore.cpp>
+        $<$<IN_LIST:AWSIOT_PKCS11PSA,${MBED_TARGET_LABELS}>:pre-main/provision/COMPONENT_AWSIOT_PKCS11PSA/provision_psa.cpp>
+        $<$<IN_LIST:AWSIOT_PKCS11PSA,${MBED_TARGET_LABELS}>:pre-main/provision/COMPONENT_AWSIOT_PKCS11PSA/provision_psa_utils.cpp>
 )
 
 if("NUVOTON" IN_LIST MBED_TARGET_LABELS)
@@ -56,15 +73,26 @@ if("NUVOTON" IN_LIST MBED_TARGET_LABELS)
     )
 endif()
 
-target_link_libraries(${APP_TARGET}
-    PRIVATE
-        mbed-client-for-aws
-        mbed-os
-        mbed-storage-kvstore
-        mbed-mbedtls
-        mbed-netsocket
-        mbed-wifi
-)
+if("AWSIOT_PKCS11" IN_LIST MBED_TARGET_LABELS)
+    target_link_libraries(${APP_TARGET}
+        PRIVATE
+            mbed-client-for-aws
+            mbed-os
+            mbed-storage-kvstore
+            mbed-mbedtls
+            mbed-netsocket
+            mbed-wifi
+    )
+elseif("AWSIOT_PKCS11PSA" IN_LIST MBED_TARGET_LABELS)
+    target_link_libraries(${APP_TARGET}
+        PRIVATE
+            mbed-client-for-aws
+            mbed-os
+            mbed-mbedtls
+            mbed-netsocket
+            mbed-wifi
+    )
+endif()
 
 mbed_set_post_build(${APP_TARGET})
 

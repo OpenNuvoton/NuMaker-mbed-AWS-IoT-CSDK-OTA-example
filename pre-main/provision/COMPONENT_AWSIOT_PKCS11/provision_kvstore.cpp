@@ -66,8 +66,8 @@ extern "C" {
 
 
 /* Install key/value into KVStore */
-#define INSTALL_KEY_VALUE(KEY, VALUE, FLAG)                                         \
-    kv_status = inner_store->set(KEY, VALUE, strlen(VALUE), FLAG);                  \
+#define INSTALL_KEY_VALUE(KEY, VALUE, VALUE_SIZE, FLAG)                                         \
+    kv_status = inner_store->set(KEY, VALUE, VALUE_SIZE, FLAG);                  \
     if (kv_status != MBED_SUCCESS) {                                                \
         printf("Install \'%s\' into KVStore failed: %d\r\n",                        \
                KEY, MBED_GET_ERROR_CODE(kv_status));                                \
@@ -161,24 +161,24 @@ void provision(void)
     /* Install AWS credentials... */
 
     /* Install AWS root CA certificate */
-    INSTALL_KEY_VALUE(pkcs11configLABEL_ROOT_CERTIFICATE, aws_rootCACrt, 0);
+    INSTALL_KEY_VALUE(pkcs11configLABEL_ROOT_CERTIFICATE, aws_rootCACrt, strlen(aws_rootCACrt) + 1, 0);
 
     /* Install AWS device certificate */
-    INSTALL_KEY_VALUE(pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS, aws_deviceCrt, 0);
+    INSTALL_KEY_VALUE(pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS, aws_deviceCrt, strlen(aws_deviceCrt) + 1, 0);
     
     /* Install AWS device public key */
-    INSTALL_KEY_VALUE(pkcs11configLABEL_DEVICE_PUBLIC_KEY_FOR_TLS, aws_devicePubKey, 0);
+    INSTALL_KEY_VALUE(pkcs11configLABEL_DEVICE_PUBLIC_KEY_FOR_TLS, aws_devicePubKey, strlen(aws_devicePubKey) + 1, 0);
     
     /* Install AWS device private key */
-    INSTALL_KEY_VALUE(pkcs11configLABEL_DEVICE_PRIVATE_KEY_FOR_TLS, aws_devicePvtKey, 0);
+    INSTALL_KEY_VALUE(pkcs11configLABEL_DEVICE_PRIVATE_KEY_FOR_TLS, aws_devicePvtKey, strlen(aws_devicePvtKey) + 1, 0);
     
     /* Install AWS code verification certificate/public key */
-    INSTALL_KEY_VALUE(pkcs11configLABEL_CODE_VERIFICATION_KEY, aws_codeVerCrt, 0);
+    INSTALL_KEY_VALUE(pkcs11configLABEL_CODE_VERIFICATION_KEY, aws_codeVerCrt, strlen(aws_codeVerCrt) + 1, 0);
 
     /* Install AWS credentials...END */
 
     /* Mark the device as provisioned */
-    INSTALL_KEY_VALUE(KV_KEY_PROVISION, "1", KVStore::WRITE_ONCE_FLAG);
+    INSTALL_KEY_VALUE(KV_KEY_PROVISION, "1", 1, KVStore::WRITE_ONCE_FLAG);
 
     printf("Provision for development...OK\r\n");
 }

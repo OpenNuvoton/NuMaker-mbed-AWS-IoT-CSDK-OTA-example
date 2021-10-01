@@ -45,6 +45,20 @@
             "storage_tdb_internal.internal_base_address"    : "0x68000",
             "storage_tdb_internal.internal_size"            : "0x8000",
             "storage.storage_type"                          : "TDB_INTERNAL"
+        },
+        "NU_M2354": {
+            "target.components_add"                 : ["AWSIOT_MQTT", "AWSIOT_JOBS", "AWSIOT_JSON", "AWSIOT_OTA", "AWSIOT_OTA_PAL_PSAFWU", "AWSIOT_PKCS11PSA"],
+            "target.network-default-interface-type" : "WIFI",
+            "nsapi.default-wifi-security"           : "WPA_WPA2",
+            "nsapi.default-wifi-ssid"               : "\"SSID\"",
+            "nsapi.default-wifi-password"           : "\"PASSWORD\"",
+            "esp8266.tx"                            : "PC_7",
+            "esp8266.rx"                            : "PC_6",
+            "esp8266.rts"                           : "PE_13",
+            "esp8266.cts"                           : "PC_8",
+            "esp8266.rst"                           : "PC_13",
+            "esp8266.provide-default"               : true,
+            "target.features_add"                   : ["EXPERIMENTAL_API"]
         }
     }
 }

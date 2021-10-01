@@ -40,21 +40,27 @@ extern "C" {
 #endif
 }
 
+extern Mutex log_mutex;
+
 #if (MBED_HEAP_STATS_ENABLED)
 void print_heap_stats(void)
 {
+    log_mutex.lock();
     mbed_stats_heap_t stats;
     mbed_stats_heap_get(&stats);
     printf("** MBED HEAP STATS **\n");
-    printf("**** current_size: %" PRIu32 "\n", stats.current_size);
-    printf("**** max_size    : %" PRIu32 "\n", stats.max_size);
+    printf("**** current_size   : %" PRIu32 "\n", stats.current_size);
+    printf("**** max_size       : %" PRIu32 "\n", stats.max_size);
+    printf("**** reserved_size  : %" PRIu32 "\n", stats.reserved_size);
     printf("*****************************\n\n");
+    log_mutex.unlock();
 }
 #endif  // MBED_HEAP_STATS_ENABLED
 
 #if (MBED_STACK_STATS_ENABLED)
 void print_stack_statistics()
 {
+    log_mutex.lock();
     printf("** MBED THREAD STACK STATS **\n");
     int cnt = osThreadGetCount();
     mbed_stats_stack_t *stats = (mbed_stats_stack_t*) malloc(cnt * sizeof(mbed_stats_stack_t));
@@ -68,5 +74,6 @@ void print_stack_statistics()
         free(stats);
     }
     printf("*****************************\n\n");
+    log_mutex.unlock();
 }
 #endif  // MBED_STACK_STATS_ENABLED
