@@ -1,4 +1,5 @@
 /*
+ * AWS IoT Device SDK for Embedded C 202108.00
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -66,12 +67,13 @@ extern "C" {
 /* OTA Library include. */
 /* OtaTimerInterface_t (ota_os_interface.h) has member 'delete' which is C++ reserved
  * keyword. Try get around it. */
-#define delete  delete_
+/* NOTE: This is fixed on 202108.00 and redefine delete gets unnecessary. */
+//#define delete  deleteTimer
 extern "C" {
 #include "ota.h"
 #include "ota_config.h"
 }
-#undef delete
+//#undef delete
 
 /* OTA Library Interface include. */
 #include "ota_os_mbed.h"
@@ -84,6 +86,15 @@ extern "C" {
 extern "C" {
 #include "ota_appversion32.h"
 }
+
+#if MBED_CONF_MBED_TRACE_ENABLE
+
+#define TRACE_GROUP "Main"
+
+static void trace_mutex_lock();
+static void trace_mutex_unlock();
+
+#endif  /* #if MBED_CONF_MBED_TRACE_ENABLE */
 
 /**
  * These configuration settings are required to run the OTA demo which uses mutual authentication.
@@ -108,6 +119,10 @@ extern "C" {
  * Please see more details about the ALPN protocol for AWS IoT MQTT endpoint
  * in the link below.
  * https://aws.amazon.com/blogs/iot/mqtt-with-tls-client-authentication-on-port-443-why-it-is-useful-and-how-it-works/
+ *
+ * @note OpenSSL requires that the protocol string passed to it for configuration be encoded
+ * with the prefix of 8-bit length information of the string. Thus, the 14 byte (0x0e) length
+ * information is prefixed to the string.
  */
 /* The original format is for openssl API SSL_set_alpn_protos(...). Remove the length prefix
  * to fit mbedtls API mbedtls_ssl_conf_alpn_protocols. */
@@ -145,7 +160,7 @@ extern "C" {
 /**
  * @brief Transport timeout in milliseconds for transport send and receive.
  */
-#define TRANSPORT_SEND_RECV_TIMEOUT_MS      ( 200U )
+#define TRANSPORT_SEND_RECV_TIMEOUT_MS      ( 500U )
 
 /**
  * @brief Timeout for receiving CONNACK packet in milli seconds.
@@ -167,6 +182,11 @@ extern "C" {
  * @brief Timeout for MQTT_ProcessLoop function in milliseconds.
  */
 #define MQTT_PROCESS_LOOP_TIMEOUT_MS        ( 1000U )
+
+/**
+ * @brief Period for waiting on ack.
+ */
+#define MQTT_ACK_TIMEOUT_MS                 ( 5000U )
 
 /**
  * @brief Period for demo loop sleep in milliseconds.
@@ -255,22 +275,18 @@ extern "C" {
 /**
  * @brief The common prefix for all OTA topics.
  */
-#define OTA_TOPIC_PREFIX           "$aws/things/"
+#define OTA_TOPIC_PREFIX    "$aws/things/+/"
 
 /**
  * @brief The string used for jobs topics.
  */
-#define OTA_TOPIC_JOBS             "jobs"
+#define OTA_TOPIC_JOBS      "jobs"
 
 /**
  * @brief The string used for streaming service topics.
  */
-#define OTA_TOPIC_STREAM           "streams"
+#define OTA_TOPIC_STREAM    "streams"
 
-/**
- * @brief The length of #OTA_TOPIC_PREFIX
- */
-#define OTA_TOPIC_PREFIX_LENGTH    ( ( uint16_t ) ( sizeof( OTA_TOPIC_PREFIX ) - 1U ) )
 
 /*-----------------------------------------------------------*/
 
@@ -321,22 +337,27 @@ static rtos::Mutex mqttMutex;
 /**
  * @brief Semaphore for synchronizing buffer operations.
  */
-static rtos::Semaphore bufferSemaphore(1);
+static rtos::Semaphore bufferSemaphore(1, 1);
+
+/**
+ * @brief Semaphore for synchronizing wait for ack.
+ */
+static rtos::Semaphore ackSemaphore(0, 1);
 
 /** 
  * @brief OTA Agent thread
  */
-rtos::Thread otaAgentThread(osPriorityNormal, 4096);
+rtos::Thread otaAgentThread(osPriorityNormal, 5120);
 
 /**
- * @brief Enum for type of OTA messages received.
+ * @brief Enum for type of OTA job messages received.
  */
-typedef enum OtaMessageType
+typedef enum jobMessageType
 {
-    OtaMessageTypeJob = 0,
-    OtaMessageTypeStream,
-    OtaNumOfMessageType
-} OtaMessageType_t;
+    jobMessageTypeNextGetAccepted = 0,
+    jobMessageTypeNextNotify,
+    jobMessageTypeMax
+} jobMessageType_t;
 
 /**
  * @brief The network buffer must remain valid when OTA library task is running.
@@ -590,8 +611,9 @@ static void mqttJobCallback( MQTTContext_t * pContext,
 static void mqttDataCallback( MQTTContext_t * pContext,
                               MQTTPublishInfo_t * pPublishInfo );
 
-static SubscriptionManagerCallback_t otaMessageCallback[ OtaNumOfMessageType ] = { mqttJobCallback, mqttDataCallback };
+static SubscriptionManagerCallback_t otaMessageCallback[] = { mqttJobCallback, mqttDataCallback };
 
+/*-----------------------------------------------------------*/
 
 /* Extra configuration for on-board SPI flash for OTA update
  *
@@ -659,8 +681,9 @@ static void otaAppCallback( OtaJobEvent_t event,
             /* Activate the new firmware image. */
             OTA_ActivateNewImage();
 
-            /* Shutdown OTA Agent. */
-            OTA_Shutdown( 0 );
+            /* Shutdown OTA Agent, if it is required that the unsubscribe operations are not
+             * performed while shutting down please set the second parameter to 0 instead of 1. */
+            OTA_Shutdown( 0, 1 );
 
             /* Requires manual activation of new image.*/
             LogError( ( "New image activation failed." ) );
@@ -708,15 +731,54 @@ static void otaAppCallback( OtaJobEvent_t event,
              * new image downloaded failed.*/
             LogError( ( "Self-test failed, shutting down OTA Agent." ) );
 
-            /* Shutdown OTA Agent. */
-            OTA_Shutdown( 0 );
-
+            /* Shutdown OTA Agent, if it is required that the unsubscribe operations are not
+             * performed while shutting down please set the second parameter to 0 instead of 1. */
+            OTA_Shutdown( 0, 1 );
 
             break;
 
         default:
             LogDebug( ( "Received invalid callback event from OTA Agent." ) );
     }
+}
+
+jobMessageType_t getJobMessageType( const char * pTopicName,
+                                    uint16_t topicNameLength )
+{
+    uint16_t index = 0U;
+    MQTTStatus_t mqttStatus = MQTTSuccess;
+    bool isMatch = false;
+    jobMessageType_t jobMessageIndex = jobMessageTypeMax;
+
+    /* For suppressing compiler-warning: unused variable. */
+    ( void ) mqttStatus;
+
+    /* Lookup table for OTA job message string. */
+    static const char * const pJobTopicFilters[ jobMessageTypeMax ] =
+    {
+        OTA_TOPIC_PREFIX OTA_TOPIC_JOBS "/$next/get/accepted",
+        OTA_TOPIC_PREFIX OTA_TOPIC_JOBS "/notify-next",
+    };
+
+    /* Match the input topic filter against the wild-card pattern of topics filters
+    * relevant for the OTA Update service to determine the type of topic filter. */
+    for( ; index < jobMessageTypeMax; index++ )
+    {
+        mqttStatus = MQTT_MatchTopic( pTopicName,
+                                      topicNameLength,
+                                      pJobTopicFilters[ index ],
+                                      strlen( pJobTopicFilters[ index ] ),
+                                      &isMatch );
+        assert( mqttStatus == MQTTSuccess );
+
+        if( isMatch )
+        {
+            jobMessageIndex = (jobMessageType_t) index;
+            break;
+        }
+    }
+
+    return jobMessageIndex;
 }
 
 /*-----------------------------------------------------------*/
@@ -726,29 +788,43 @@ static void mqttJobCallback( MQTTContext_t * pContext,
 {
     OtaEventData_t * pData;
     OtaEventMsg_t eventMsg = { 0 };
+    jobMessageType_t jobMessageType = (jobMessageType_t) 0;
 
     assert( pPublishInfo != NULL );
     assert( pContext != NULL );
 
     ( void ) pContext;
 
-    LogInfo( ( "Received job message callback, size %d.\n\n", pPublishInfo->payloadLength ) );
+    jobMessageType = getJobMessageType( pPublishInfo->pTopicName, pPublishInfo->topicNameLength );
 
-    pData = otaEventBufferGet();
-
-    if( pData != NULL )
+    switch( jobMessageType )
     {
-        memcpy( pData->data, pPublishInfo->pPayload, pPublishInfo->payloadLength );
-        pData->dataLength = pPublishInfo->payloadLength;
-        eventMsg.eventId = OtaAgentEventReceivedJobDocument;
-        eventMsg.pEventData = pData;
+        case jobMessageTypeNextGetAccepted:
+        case jobMessageTypeNextNotify:
 
-        /* Send job document received event. */
-        OTA_SignalEvent( &eventMsg );
-    }
-    else
-    {
-        LogError( ( "No OTA data buffers available." ) );
+            pData = otaEventBufferGet();
+
+            if( pData != NULL )
+            {
+                memcpy( pData->data, pPublishInfo->pPayload, pPublishInfo->payloadLength );
+                pData->dataLength = pPublishInfo->payloadLength;
+                eventMsg.eventId = OtaAgentEventReceivedJobDocument;
+                eventMsg.pEventData = pData;
+
+                /* Send job document received event. */
+                OTA_SignalEvent( &eventMsg );
+            }
+            else
+            {
+                LogError( ( "No OTA data buffers available." ) );
+            }
+
+            break;
+
+        default:
+            LogInfo( ( "Received job message %s size %ld.\n\n",
+                       pPublishInfo->pTopicName,
+                       pPublishInfo->payloadLength ) );
     }
 }
 
@@ -828,6 +904,7 @@ static void mqttEventCallback( MQTTContext_t * pMqttContext,
             case MQTT_PACKET_TYPE_PUBACK:
                 LogInfo( ( "PUBACK received for packet id %u.\n\n",
                            pDeserializedInfo->packetIdentifier ) );
+                ackSemaphore.release();
                 break;
 
             /* Any other packet type is invalid. */
@@ -851,7 +928,7 @@ static int initializeMqtt( MQTTContext_t * pMqttContext,
                            NetworkContext_t * pNetworkContext )
 {
     int returnStatus = EXIT_SUCCESS;
-    MQTTStatus_t mqttStatus;
+    MQTTStatus_t mqttStatus = MQTTBadParameter;
     MQTTFixedBuffer_t networkBuffer;
     TransportInterface_t transport;
 
@@ -935,7 +1012,7 @@ static int connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContext
          * For username and password based authentication in AWS IoT,
          * #AWS_IOT_PASSWORD_ALPN is used. More details can be found in the
          * link below.
-         * https://docs.aws.amazon.com/iot/latest/developerguide/enhanced-custom-auth-using.html
+         * https://docs.aws.amazon.com/iot/latest/developerguide/custom-authentication.html
          */
         #ifdef CLIENT_USERNAME
             //opensslCredentials.pAlpnProtos = AWS_IOT_PASSWORD_ALPN;
@@ -1043,7 +1120,7 @@ static int establishMqttSession( MQTTContext_t * pMqttContext )
     /* Use the username and password for authentication, if they are defined.
      * Refer to the AWS IoT documentation below for details regarding client
      * authentication with a username and password.
-     * https://docs.aws.amazon.com/iot/latest/developerguide/enhanced-custom-authentication.html
+     * https://docs.aws.amazon.com/iot/latest/developerguide/custom-authentication.html
      * An authorizer setup needs to be done, as mentioned in the above link, to use
      * username/password based client authentication.
      *
@@ -1176,100 +1253,52 @@ static void disconnect( void )
 
 /*-----------------------------------------------------------*/
 
-static OtaMessageType_t getOtaMessageType( const char * pTopicFilter,
-                                           uint16_t topicFilterLength )
+static void registerSubscriptionManagerCallback( const char * pTopicFilter,
+                                                 uint16_t topicFilterLength )
 {
-    int retStatus = EXIT_FAILURE;
+    bool isMatch = false;
+    MQTTStatus_t mqttStatus = MQTTSuccess;
+    SubscriptionManagerStatus_t subscriptionStatus = SUBSCRIPTION_MANAGER_SUCCESS;
 
-    uint16_t stringIndex = 0U, fieldLength = 0U, i = 0U;
-    OtaMessageType_t retMesageType = OtaNumOfMessageType;
+    uint16_t index = 0U;
+
+    /* For suppressing compiler-warning: unused variable. */
+    ( void ) mqttStatus;
 
     /* Lookup table for OTA message string. */
-    static const char * const pOtaMessageStrings[ OtaNumOfMessageType ] =
+    static const char * const pWildCardTopicFilters[] =
     {
-        OTA_TOPIC_JOBS,
-        OTA_TOPIC_STREAM
+        OTA_TOPIC_PREFIX OTA_TOPIC_JOBS "/#",
+        OTA_TOPIC_PREFIX OTA_TOPIC_STREAM "/#"
     };
 
-    /* Check topic prefix is valid.*/
-    if( strncmp( pTopicFilter, OTA_TOPIC_PREFIX, ( size_t ) OTA_TOPIC_PREFIX_LENGTH ) == 0 )
+    /* Match the input topic filter against the wild-card pattern of topics filters
+    * relevant for the OTA Update service to determine the type of topic filter. */
+    for( ; index < 2; index++ )
     {
-        stringIndex = OTA_TOPIC_PREFIX_LENGTH;
+        mqttStatus = MQTT_MatchTopic( pTopicFilter,
+                                      topicFilterLength,
+                                      pWildCardTopicFilters[ index ],
+                                      strlen( pWildCardTopicFilters[ index ] ),
+                                      &isMatch );
+        assert( mqttStatus == MQTTSuccess );
 
-        retStatus = EXIT_SUCCESS;
-    }
-
-    /* Check if thing name is valid.*/
-    if( retStatus == EXIT_SUCCESS )
-    {
-        retStatus = EXIT_FAILURE;
-
-        /* Extract the thing name.*/
-        for( ; stringIndex < topicFilterLength; stringIndex++ )
+        if( isMatch )
         {
-            if( pTopicFilter[ stringIndex ] == ( char ) '/' )
-            {
-                break;
-            }
-            else
-            {
-                fieldLength++;
-            }
-        }
+            /* Register callback to subscription manager. */
+            subscriptionStatus = SubscriptionManager_RegisterCallback( pWildCardTopicFilters[ index ],
+                                                                       strlen( pWildCardTopicFilters[ index ] ),
+                                                                       otaMessageCallback[ index ] );
 
-        if( fieldLength > 0 )
-        {
-            /* Check thing name.*/
-            if( strncmp( &pTopicFilter[ stringIndex - fieldLength ],
-                         THING_NAME,
-                         ( size_t ) ( fieldLength ) ) == 0 )
+            if( subscriptionStatus != SUBSCRIPTION_MANAGER_SUCCESS )
             {
-                stringIndex++;
-
-                retStatus = EXIT_SUCCESS;
+                LogWarn( ( "Failed to register a callback to subscription manager with error = %d.",
+                           subscriptionStatus ) );
             }
+
+            break;
         }
     }
-
-    /* Check the message type from topic.*/
-    if( retStatus == EXIT_SUCCESS )
-    {
-        fieldLength = 0;
-
-        /* Extract the topic type.*/
-        for( ; stringIndex < topicFilterLength; stringIndex++ )
-        {
-            if( pTopicFilter[ stringIndex ] == ( char ) '/' )
-            {
-                break;
-            }
-            else
-            {
-                fieldLength++;
-            }
-        }
-
-        if( fieldLength > 0 )
-        {
-            for( i = 0; i < OtaNumOfMessageType; i++ )
-            {
-                /* check thing name.*/
-                if( strncmp( &pTopicFilter[ stringIndex - fieldLength ],
-                             pOtaMessageStrings[ i ],
-                             ( size_t ) ( fieldLength ) ) == 0 )
-                {
-                    break;
-                }
-            }
-
-            if( i < OtaNumOfMessageType )
-            {
-                retMesageType = (OtaMessageType_t) i;
-            }
-        }
-    }
-
-    return retMesageType;
 }
 
 /*-----------------------------------------------------------*/
@@ -1279,10 +1308,8 @@ static OtaMqttStatus_t mqttSubscribe( const char * pTopicFilter,
                                       uint8_t qos )
 {
     OtaMqttStatus_t otaRet = OtaMqttSuccess;
-    SubscriptionManagerStatus_t subscriptionStatus = SUBSCRIPTION_MANAGER_SUCCESS;
-    OtaMessageType_t otaMessageType;
 
-    MQTTStatus_t mqttStatus;
+    MQTTStatus_t mqttStatus = MQTTBadParameter;
     MQTTContext_t * pMqttContext = &mqttContext;
     MQTTSubscribeInfo_t pSubscriptionList[ 1 ];
 
@@ -1321,21 +1348,8 @@ static OtaMqttStatus_t mqttSubscribe( const char * pTopicFilter,
         LogInfo( ( "SUBSCRIBE topic %.*s to broker.\n\n",
                    topicFilterLength,
                    pTopicFilter ) );
-    }
 
-    otaMessageType = getOtaMessageType( pTopicFilter, topicFilterLength );
-
-    assert( ( otaMessageType >= 0 ) && ( otaMessageType < OtaNumOfMessageType ) );
-
-    /* Register callback to subscription manager. */
-    subscriptionStatus = SubscriptionManager_RegisterCallback( pTopicFilter,
-                                                               topicFilterLength,
-                                                               otaMessageCallback[ otaMessageType ] );
-
-    if( subscriptionStatus != SUBSCRIPTION_MANAGER_SUCCESS )
-    {
-        LogWarn( ( "Failed to register a callback to subscription manager with error = %d.",
-                   subscriptionStatus ) );
+        registerSubscriptionManagerCallback( pTopicFilter, topicFilterLength );
     }
 
     return otaRet;
@@ -1352,7 +1366,7 @@ static OtaMqttStatus_t mqttPublish( const char * const pacTopic,
     OtaMqttStatus_t otaRet = OtaMqttSuccess;
 
     MQTTStatus_t mqttStatus = MQTTBadParameter;
-    MQTTPublishInfo_t publishInfo = {};
+    MQTTPublishInfo_t publishInfo = { };
     MQTTContext_t * pMqttContext = &mqttContext;
 
     /* Set the required publish parameters. */
@@ -1367,20 +1381,24 @@ static OtaMqttStatus_t mqttPublish( const char * const pacTopic,
         mqttStatus = MQTT_Publish( pMqttContext,
                                    &publishInfo,
                                    MQTT_GetPacketId( pMqttContext ) );
+                          
+        if( mqttStatus != MQTTSuccess )
+        {
+            LogError( ( "Failed to send PUBLISH packet to broker with error = %u.", mqttStatus ) );
+
+            otaRet = OtaMqttPublishFailed;
+        }
     }
     mqttMutex.unlock();
 
-    if( mqttStatus != MQTTSuccess )
+    if( ( mqttStatus == MQTTSuccess ) && ( qos == 1 ) )
     {
-        LogError( ( "Failed to send PUBLISH packet to broker with error = %u.", mqttStatus ) );
+        if (!ackSemaphore.try_acquire_for(std::chrono::milliseconds(MQTT_ACK_TIMEOUT_MS)))
+        {
+            LogError( ( "Failed to receive ack for publish." ) );
 
-        otaRet = OtaMqttPublishFailed;
-    }
-    else
-    {
-        LogInfo( ( "Sent PUBLISH packet to broker %.*s to broker.\n\n",
-                   topicLen,
-                   pacTopic ) );
+            otaRet = OtaMqttPublishFailed;
+        }
     }
 
     return otaRet;
@@ -1419,14 +1437,14 @@ static OtaMqttStatus_t mqttUnsubscribe( const char * pTopicFilter,
 
     if( mqttStatus != MQTTSuccess )
     {
-        LogError( ( "Failed to send SUBSCRIBE packet to broker with error = %u.",
+        LogError( ( "Failed to send UNSUBSCRIBE packet to broker with error = %u.",
                     mqttStatus ) );
 
         otaRet = OtaMqttUnsubscribeFailed;
     }
     else
     {
-        LogInfo( ( "SUBSCRIBE topic %.*s to broker.\n\n",
+        LogInfo( ( "UNSUBSCRIBE topic %.*s to broker.\n\n",
                    topicFilterLength,
                    pTopicFilter ) );
     }
@@ -1447,9 +1465,10 @@ static void setOtaInterfaces( OtaInterfaces_t * pOtaInterfaces )
     pOtaInterfaces->os.timer.stop = Mbed_OtaStopTimer;
     /* Get around C++ reserved keyword 'delete' used in OtaTimerInterface_t
      * (ota_os_interface.h) as above */
-    #define delete  delete_
-    pOtaInterfaces->os.timer.delete = Mbed_OtaDeleteTimer;
-    #undef delete
+    /* NOTE: This is fixed on 202108.00 and redefine delete gets unnecessary. */
+    //#define delete  deleteTimer
+    pOtaInterfaces->os.timer.deleteTimer = Mbed_OtaDeleteTimer;
+    //#undef delete
     pOtaInterfaces->os.mem.malloc = STDC_Malloc;
     pOtaInterfaces->os.mem.free = STDC_Free;
 
@@ -1497,6 +1516,9 @@ static int startOTADemo( void )
 
     /* OTA library packet statistics per job.*/
     OtaAgentStatistics_t otaStatistics = { 0 };
+
+    /* Status return from call to pthread_join. */
+    osStatus returnJoin = osOK;
 
     /* OTA interface context required for library interface functions.*/
     OtaInterfaces_t otaInterfaces;
@@ -1554,9 +1576,7 @@ static int startOTADemo( void )
             if( mqttSessionEstablished != true )
             {
                 /* Connect to MQTT broker and create MQTT connection. */
-                returnStatus = establishConnection();
-
-                if( returnStatus == EXIT_SUCCESS )
+                if( EXIT_SUCCESS == establishConnection() )
                 {
                     /* Check if OTA process was suspended and resume if required. */
                     if( state == OtaAgentStateSuspended )
@@ -1595,7 +1615,7 @@ static int startOTADemo( void )
                                otaStatistics.otaPacketsDropped ) );
 
                     /* Delay if mqtt process loop is set to zero.*/
-                    if( !( MQTT_PROCESS_LOOP_TIMEOUT_MS > 0 ) )
+                    if( MQTT_PROCESS_LOOP_TIMEOUT_MS > 0 )
                     {
                         Clock_SleepMs( OTA_EXAMPLE_LOOP_SLEEP_PERIOD_MS );
                     }
@@ -1632,43 +1652,24 @@ static int startOTADemo( void )
         }
     }
 
+    /****************************** Wait for OTA Thread. ******************************/
+
+    if( returnStatus == EXIT_SUCCESS )
+    {
+        returnJoin = otaAgentThread.join();
+
+        if( returnJoin != osOK )
+        {
+            LogError( ( "Failed to join thread"
+                        ",error code = %d",
+                        returnStatus ) );
+
+            returnStatus = EXIT_FAILURE;
+        }
+    }
+
     return returnStatus;
 }
-
-#if MBED_CONF_AWS_CLIENT_LOG_RETARGET
-
-/* Synchronize log output with mutex
- *
- * We can use the same mutex to synchronize log output across all AWS IoT SDK
- * and mbed trace, if enabled.
- */
-static Mutex log_mutex;
-
-#if MBED_CONF_MBED_TRACE_ENABLE
-
-#define TRACE_GROUP "Main"
-
-static void trace_mutex_lock()
-{
-    log_mutex.lock();
-}
-static void trace_mutex_unlock()
-{
-    log_mutex.unlock();
-}
-
-#endif
-
-extern "C" void aws_iot_log_printf(const char * format, ...) {
-    log_mutex.lock();
-    va_list args;
-    va_start (args, format);
-    vprintf(format, args);
-    va_end (args);
-    log_mutex.unlock();
-}
-
-#endif
 
 /*-----------------------------------------------------------*/
 
@@ -1743,3 +1744,36 @@ int main()
 
     return returnStatus;
 }
+
+#if MBED_CONF_MBED_TRACE_ENABLE || MBED_CONF_AWS_CLIENT_LOG_RETARGET
+
+/* Synchronize log output with mutex
+ *
+ * We can use the same mutex to synchronize log output across all AWS IoT SDK
+ * and mbed trace, if enabled.
+ */
+static Mutex log_mutex;
+
+#if MBED_CONF_MBED_TRACE_ENABLE
+static void trace_mutex_lock()
+{
+    log_mutex.lock();
+}
+static void trace_mutex_unlock()
+{
+    log_mutex.unlock();
+}
+#endif  /* #if MBED_CONF_MBED_TRACE_ENABLE */
+
+#if MBED_CONF_AWS_CLIENT_LOG_RETARGET
+extern "C" void aws_iot_log_printf(const char * format, ...) {
+    log_mutex.lock();
+    va_list args;
+    va_start (args, format);
+    vprintf(format, args);
+    va_end (args);
+    log_mutex.unlock();
+}
+#endif  /* #if MBED_CONF_AWS_CLIENT_LOG_RETARGET */
+
+#endif /* #if MBED_CONF_MBED_TRACE_ENABLE || MBED_CONF_AWS_CLIENT_LOG_RETARGET */

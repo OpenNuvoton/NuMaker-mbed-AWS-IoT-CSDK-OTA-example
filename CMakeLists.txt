@@ -9,10 +9,17 @@ set(APP_TARGET NuMaker-mbed-AWS-IoT-CSDK-OTA-example)
 
 include(${MBED_PATH}/tools/cmake/app.cmake)
 
-add_compile_definitions(MBEDTLS_THREADING_C)
-add_compile_definitions(MBEDTLS_THREADING_ALT)
-add_compile_definitions(APPLICATION_ADDR=0x00)
-add_compile_definitions(APPLICATION_SIZE=0x80000)
+project(${APP_TARGET})
+
+# Unnecessary due to defined in mbed_lib.json of mbed-client-for-aws
+#add_compile_definitions(MBEDTLS_THREADING_C)
+#add_compile_definitions(MBEDTLS_THREADING_ALT)
+
+if("NUMAKER_PFM_M487" IN_LIST MBED_TARGET_LABELS OR
+   "NUMAKER_IOT_M487" IN_LIST MBED_TARGET_LABELS)
+    add_compile_definitions(APPLICATION_ADDR=0x00)
+    add_compile_definitions(APPLICATION_SIZE=0x80000)
+endif()
 
 add_subdirectory(${MBED_PATH})
 add_subdirectory(mbed-client-for-aws)
@@ -20,8 +27,6 @@ add_subdirectory(mbed-client-for-aws)
 add_executable(${APP_TARGET})
 
 mbed_configure_app_target(${APP_TARGET})
-
-project(${APP_TARGET})
 
 target_include_directories(${APP_TARGET}
     PRIVATE
