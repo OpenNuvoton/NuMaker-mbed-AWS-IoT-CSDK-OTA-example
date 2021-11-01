@@ -279,14 +279,23 @@ extern "C" {
  */
 const AppVersion32_t appFirmwareVersion =
 {
-#if defined(__CC_ARM)
-    .u.x.major = APP_VERSION_MAJOR,
-    .u.x.minor = APP_VERSION_MINOR,
-    .u.x.build = APP_VERSION_BUILD,
-#else
-    {{APP_VERSION_MAJOR, APP_VERSION_MINOR, APP_VERSION_BUILD}}
-#endif
-
+    .u = {
+        #if ( defined( __BYTE_ORDER__ ) && defined( __ORDER_LITTLE_ENDIAN__ ) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ) || ( __little_endian__ == 1 ) || WIN32 || ( __BYTE_ORDER == __LITTLE_ENDIAN )
+        .x = {
+            APP_VERSION_BUILD,
+            APP_VERSION_MINOR,
+            APP_VERSION_MAJOR,
+        },
+        #elif ( defined( __BYTE_ORDER__ ) && defined( __ORDER_BIG_ENDIAN__ ) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ) || ( __big_endian__ == 1 ) || ( __BYTE_ORDER == __BIG_ENDIAN )
+        .x = {
+            APP_VERSION_MAJOR,
+            APP_VERSION_MINOR,
+            APP_VERSION_BUILD,
+        },
+        #else /* if ( defined( __BYTE_ORDER__ ) && defined( __ORDER_LITTLE_ENDIAN__ ) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ) || ( __little_endian__ == 1 ) || WIN32 || ( __BYTE_ORDER == __LITTLE_ENDIAN ) */
+        #error "Unable to determine byte order!"
+        #endif /* if ( defined( __BYTE_ORDER__ ) && defined( __ORDER_LITTLE_ENDIAN__ ) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ ) || ( __little_endian__ == 1 ) || WIN32 || ( __BYTE_ORDER == __LITTLE_ENDIAN ) */
+    }
 };
 
 /**
