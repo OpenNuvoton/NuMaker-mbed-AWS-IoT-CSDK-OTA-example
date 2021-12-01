@@ -114,11 +114,7 @@ In the following, we take NuMaker-IoT-M487 or NuMaker-M2354 as example board to 
 
     -   NuMaker-IoT-M487
 
-        BUILD/NUMAKER_IOT_M487/ARM/`NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update.bin` → `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update_V1.0.1.bin`
-
-        **NOTE**: Choose the built image file name having `_update` suffix first.
-        If none, choose the no `_update` suffix one.
-        These two ones are equivalent here.
+        BUILD/NUMAKER_IOT_M487/ARM/`NuMaker-mbed-AWS-IoT-CSDK-OTA-example.bin` → `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_V1.0.1.bin`
 
     -   NuMaker-M2354
 
@@ -183,11 +179,11 @@ The following steaps are re-statements of above and adapted to this port:
     -   NuMaker-M2354: `mbed-client-for-aws/mbed/COMPONENT_AWSIOT_PKCS11PSA/corePKCS11/core_pkcs11_config.h`
 
 1.  Select the image → Select the bucket you created during the [prerequisite steps](#prerequisites-for-the-aws-over-the-air-update-ota) → Upload the binary
-    -   NuMaker-IoT-M487: `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update_V1.0.1.bin`.
+    -   NuMaker-IoT-M487: `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_V1.0.1.bin`.
     -   NuMaker-M2354: `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update_V1.0.1.bin`
 
 1.  For **Pathname of file on device**, it is not used. Just set to below for example.
-    -   NuMaker-IoT-M487: `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update_V1.0.1.bin`.
+    -   NuMaker-IoT-M487: `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_V1.0.1.bin`.
     -   NuMaker-M2354: `NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update_V1.0.1.bin`
 
 1.  Select the IAM role created during the [prerequisite steps](#prerequisites-for-the-aws-over-the-air-update-ota).
@@ -257,7 +253,18 @@ Receive a new OTA update job:
 [INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1645] Extracted parameter: [key: value]=[execution.jobId: AFR_OTA-ccli8-ota-update-job-097]
 [INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1645] Extracted parameter: [key: value]=[execution.jobDocument.afr_ota.streamname: AFR_OTA-d94c1d82-06ee-4530-8f7b-09e434991d24]
 [INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1645] Extracted parameter: [key: value]=[execution.jobDocument.afr_ota.protocols: ["MQTT"]]
-[INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1645] Extracted parameter: [key: value]=[filepath: NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update.bin]
+```
+
+-   NuMaker-IoT-M487
+```
+[INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1645] Extracted parameter: [key: value]=[filepath: NuMaker-mbed-AWS-IoT-CSDK-OTA-example_V1.0.1.bin]
+```
+-   NuMaker-M2354
+```
+[INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1645] Extracted parameter: [key: value]=[filepath: NuMaker-mbed-AWS-IoT-CSDK-OTA-example_update_V1.0.1.bin]
+```
+
+```
 [INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1684] Extracted parameter: [key: value]=[filesize: 352698]
 [INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1684] Extracted parameter: [key: value]=[fileid: 0]
 [INFO] [OTA] [.\mbed-client-for-aws\COMPONENT_AWSIOT_OTA\ota-for-aws-iot-embedded-sdk\source\ota.c:1645] Extracted parameter: [key: value]=[certfile: Code_Verify_Key]
