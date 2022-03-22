@@ -85,6 +85,8 @@ extern "C" {
 }
 #if COMPONENT_AWSIOT_OTA_PAL_NVTBL
 #include "ota_pal_mbed.h"
+#elif COMPONENT_AWSIOT_OTA_PAL_MCUBOOT
+#include "ota_pal_mcuboot.h"
 #elif COMPONENT_AWSIOT_OTA_PAL_PSAFWU
 #include "ota_pal_psafwu.h"
 #endif

@@ -11,6 +11,16 @@ include(${MBED_PATH}/tools/cmake/app.cmake)
 
 project(${APP_TARGET})
 
+if("AWSIOT_OTA_PAL_MCUBOOT" IN_LIST MBED_TARGET_LABELS)
+    # Mbed CLI 2 fails to pass MBED_APP_START and friends to build system. See:
+    # https://github.com/ARMmbed/mbed-tools/issues/156
+    message(FATAL_ERROR
+            "Mbed CLI 2 doesn't support locating application to another address. "
+            "Use Mbed CLI 1 instead. "
+            "See: https://github.com/ARMmbed/mbed-tools/issues/156"
+    )
+endif()
+
 # Unnecessary due to defined in mbed_lib.json of mbed-client-for-aws
 #add_compile_definitions(MBEDTLS_THREADING_C)
 #add_compile_definitions(MBEDTLS_THREADING_ALT)
