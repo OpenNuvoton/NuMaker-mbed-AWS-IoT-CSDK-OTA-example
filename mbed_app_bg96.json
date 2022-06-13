@@ -1,24 +1,14 @@
 {
-    "config": {
-        "boot-base-address": {
-            "help": "Base address in bytes of boot area in internal flash",
-            "value": null,
-            "required": true
-        },
-        "boot-size": {
-            "help": "Size in bytes of boot area in internal flash",
-            "value": null,
-            "required": true
-        }
-    },
     "target_overrides": {
         "*": {
-            "aws-client.log-retarget": true,
-            "rtos.main-thread-stack-size": 8192,
-            "rtos.thread-stack-size": 2048,
-            "platform.error-filename-capture-enabled": true,
-            "platform.stdio-convert-newlines": true,
-            "platform.stdio-baud-rate": 115200
+            "aws-client.log-retarget"                   : true,
+            "rtos.main-thread-stack-size"               : 8192,
+            "rtos.thread-stack-size"                    : 2048,
+            "platform.error-filename-capture-enabled"   : true,
+            "platform.stdio-convert-newlines"           : true,
+            "platform.stdio-baud-rate"                  : 115200,
+            "platform.stack-stats-enabled"              : true,
+            "platform.heap-stats-enabled"               : true
         },
         "NUMAKER_PFM_M487": {
             "target.components_add"                 : ["AWSIOT_MQTT", "AWSIOT_JOBS", "AWSIOT_JSON", "AWSIOT_OTA", "AWSIOT_OTA_PAL_NVTBL", "AWSIOT_PKCS11", "AWSIOT_PKCS11_KVSTORE", "SPIF"],
@@ -32,28 +22,26 @@
             "target.mbed_app_size"                  : "0x68000",
             "storage_tdb_internal.internal_base_address"    : "0x68000",
             "storage_tdb_internal.internal_size"            : "0x8000",
-            "storage.storage_type"                          : "TDB_INTERNAL",
-            "boot-base-address"                             : "0x70000",
-            "boot-size"                                     : "0x10000"
+            "storage.storage_type"                          : "TDB_INTERNAL"
         },
         "NUMAKER_IOT_M487": {
             "target.components_add"                 : ["AWSIOT_MQTT", "AWSIOT_JOBS", "AWSIOT_JSON", "AWSIOT_OTA", "AWSIOT_OTA_PAL_NVTBL", "AWSIOT_PKCS11", "AWSIOT_PKCS11_KVSTORE", "SPIF"],
-            "target.network-default-interface-type": "CELLULAR",
-            "QUECTEL_BG96.provide-default": true, 
-            "QUECTEL_BG96.tx": "D1", 
-            "QUECTEL_BG96.rx": "D0",
-            "lwip.ipv4-enabled": true,
-            "lwip.ethernet-enabled": false,
-            "lwip.ppp-enabled": false,
-            "lwip.tcp-enabled": false,
-            "mbed-trace.enable": false,
-            "cellular.debug-at": false,
-            "nsapi.default-cellular-plmn": 0,
-            "nsapi.default-cellular-sim-pin": 0,
-            "nsapi.default-cellular-apn": "\"YOUR_APN\"",
-            "nsapi.default-cellular-username": 0,
-            "nsapi.default-cellular-password": 0,
-            "target.macros_add"                     : ["MBEDTLS_ENTROPY_HARDWARE_ALT", "MBED_HEAP_STATS_ENABLED=1"],
+            "target.network-default-interface-type" : "CELLULAR",
+            "QUECTEL_BG96.provide-default"          : true, 
+            "QUECTEL_BG96.tx"                       : "D1", 
+            "QUECTEL_BG96.rx"                       : "D0",
+            "lwip.ipv4-enabled"                     : true,
+            "lwip.ethernet-enabled"                 : false,
+            "lwip.ppp-enabled"                      : false,
+            "lwip.tcp-enabled"                      : false,
+            "mbed-trace.enable"                     : false,
+            "cellular.debug-at"                     : false,
+            "nsapi.default-cellular-plmn"           : 0,
+            "nsapi.default-cellular-sim-pin"        : 0,
+            "nsapi.default-cellular-apn"            : "\"YOUR_APN\"",
+            "nsapi.default-cellular-username"       : 0,
+            "nsapi.default-cellular-password"       : 0,
+            "target.macros_add"                     : ["MBEDTLS_ENTROPY_HARDWARE_ALT"],
             "spif-driver.SPI_MOSI"                  : "PC_0",
             "spif-driver.SPI_MISO"                  : "PC_1",
             "spif-driver.SPI_CLK"                   : "PC_2",
@@ -62,9 +50,7 @@
             "target.mbed_app_size"                  : "0x68000",
             "storage_tdb_internal.internal_base_address"    : "0x68000",
             "storage_tdb_internal.internal_size"            : "0x8000",
-            "storage.storage_type"                          : "TDB_INTERNAL",
-            "boot-base-address"                             : "0x70000",
-            "boot-size"                                     : "0x10000"
+            "storage.storage_type"                          : "TDB_INTERNAL"
         }
     }
 }
